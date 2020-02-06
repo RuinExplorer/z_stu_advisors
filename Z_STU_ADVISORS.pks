@@ -1,4 +1,3 @@
-/* Formatted on 6/7/2016 1:14:18 PM (QP5 v5.287) */
 CREATE OR REPLACE PACKAGE BANINST1.z_stu_advisors
 AS
    /******************************************************************************

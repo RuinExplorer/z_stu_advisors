@@ -1,4 +1,3 @@
-/* Formatted on 6/7/2016 1:16:47 PM (QP5 v5.287) */
 CREATE OR REPLACE PACKAGE BODY BANINST1.z_stu_advisors
 AS
    /******************************************************************************
@@ -22,6 +21,13 @@ AS
       1.1.1      20151026    Carl Ellsworth   Added logging to p_student_advisor_swap
       1.2.0      20160527    Carl Ellsworth   Added p_purge_advisor_records and
                                                 added parameter to ZSPADVR
+      1.2.1      20160627    Carl Ellsworth   Added logic to add advisors in purge
+                                                mode even if previously assigned.
+                                                Updated record count to include
+                                                all inserts of advisor
+      1.3.0      20181011    Carl Ellsworth   Correded a sequencing problem that would
+                                                mark new advisors as primary when
+                                                rolling forward existing advisors
 
    ******************************************************************************/
 
@@ -230,11 +236,20 @@ AS
                                     p_creator_id,
                                     p_user_id)
       LOOP
-         --purge all current and future advisor records if purge is set
          IF (p_purge = 'Y')
          THEN
+            --purge all current and future advisor records if purge is set
             p_purge_advisor_records (student_rec.pidm, p_term_code);
             COMMIT;
+
+            --add back advisor for the term regardless if previously assigned
+            P_INSERT_ADVISOR_RECORD (student_rec.pidm,
+                                     p_term_code,
+                                     v_advisor_pidm,
+                                     p_advisor_code,
+                                     v_activity_date);
+
+            v_count := v_count + 1;
          END IF;
 
          --reset variables
@@ -262,16 +277,11 @@ AS
                                      v_advisor_pidm,
                                      p_advisor_code,
                                      v_activity_date);
+
+            v_count := v_count + 1;
          ELSIF v_existing_attribute = 0
          --attributes exist in a prior term, need to insert the new and roll the old forward
          THEN
-            --insert new attribute
-            P_INSERT_ADVISOR_RECORD (student_rec.pidm,
-                                     p_term_code,
-                                     v_advisor_pidm,
-                                     p_advisor_code,
-                                     v_activity_date);
-
             --roll previously existing attributes forward to new term
             --iff p_purge is null
             IF (p_purge IS NULL)
@@ -302,9 +312,16 @@ AS
                */
                END LOOP;
             END IF;
-         ELSE
-            --attribute already exists
-            v_count := v_count - 1;
+            
+            --insert new attribute
+            P_INSERT_ADVISOR_RECORD (student_rec.pidm,
+                                     p_term_code,
+                                     v_advisor_pidm,
+                                     p_advisor_code,
+                                     v_activity_date);
+
+            v_count := v_count + 1;
+
          END IF;
 
          --insert attributes for future terms
@@ -331,7 +348,6 @@ AS
             END IF;
          END LOOP;
 
-         v_count := v_count + 1;
       END LOOP;
 
       DBMS_OUTPUT.put_line ('COMPLETION: ' || v_count || ' records loaded.');
